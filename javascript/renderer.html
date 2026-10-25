@@ -349,7 +349,7 @@ window.paintReady = new Promise((resolve) => {
   // Orbit camera (degrees) & framing — mirrors python/renderer.py
   const CAM_VFOV_DEG = 30.0;
   const CAM_FRAME_FILL = 0.80;
-  const SUN_AZIMUTH_REL_DEG = -58.0;
+  const SUN_AZIMUTH_REL_DEG = 58.0;
   const SUN_ELEVATION_DEG = 46.0;
   const MESH_DEFAULT_ALBEDO = [0.18, 0.18, 0.18];
 
@@ -358,7 +358,7 @@ window.paintReady = new Promise((resolve) => {
   const TEX_W = 2048;
 
   const urlParams = new URLSearchParams(window.location.search);
-  let camYawDeg = parseFloat(urlParams.get("yaw") ?? "142");
+  let camYawDeg = parseFloat(urlParams.get("yaw") ?? "-142");
   let camPitchDeg = parseFloat(urlParams.get("pitch") ?? "11");
 
 
@@ -698,8 +698,9 @@ window.paintReady = new Promise((resolve) => {
     const yaw = camYawDeg * PI / 180;
     const pitch = camPitchDeg * PI / 180;
     const forward = [Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)];
-    const right = normalize3(cross3([0, 1, 0], forward));
-    const up = cross3(forward, right);
+    // Right-handed: screen-right = forward x worldUp (matches three.js PerspectiveCamera)
+    const right = normalize3(cross3(forward, [0, 1, 0]));
+    const up = cross3(right, forward);
     return { forward, right, up };
   }
 
@@ -1070,6 +1071,15 @@ window.paintReady = new Promise((resolve) => {
   }
 
   // ---------- Sun & sky ----------
+  // Analytic split-sum DFG term (Karis 2014; same constants as three.js DFGApprox)
+  vec2 dfgApprox(float nDotV, float roughness) {
+    const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+    const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+    vec4 r = roughness * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28 * nDotV)) * r.x + r.y;
+    return vec2(-1.04, 1.04) * a004 + r.zw;
+  }
+
   vec3 evaluateStudioBackdrop(vec3 rd) {
     float y = saturate(rd.y);
     float w = pow(smoothstep(0.0, 0.85, y), 0.8);
@@ -1116,8 +1126,10 @@ window.paintReady = new Promise((resolve) => {
     vec3 direct = cookTorranceBrdf(s.n, v, u_sunDir, s.albedo, s.roughness, f0) * SUN_RADIANCE * sunVis;
     vec3 fres = schlickFresnel(saturate(dot(s.n, v)), f0);
     vec3 ambient = s.albedo * skyAmbient(s.n) * (1.0 - fres) * ao;
-    float gloss = (1.0 - s.roughness) * (1.0 - s.roughness);
-    vec3 envSpec = evaluateStudioBackdrop(reflect(rd, s.n)) * fres * gloss * ao;
+    // The backdrop is a smooth gradient, so the unfiltered lookup stands in for a prefiltered one
+    vec2 dfg = dfgApprox(saturate(dot(s.n, v)), s.roughness);
+    vec3 envDir = normalize(mix(reflect(rd, s.n), s.n, s.roughness * s.roughness));
+    vec3 envSpec = evaluateStudioBackdrop(envDir) * (f0 * dfg.x + dfg.y) * ao;
     vec3 surf = direct + ambient + envSpec;
 
     // Fade the infinite ground into the backdrop so the horizon line disappears

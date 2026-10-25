@@ -231,13 +231,13 @@ DEFAULT_MODEL_PATH = Path(__file__).resolve().parent.parent / "common" / "files"
 MODEL_UP_AXIS: str = os.environ.get("MODEL_UP_AXIS", "z").lower()
 
 # Orbit camera: yaw around the vertical axis, downward pitch, vertical field of view
-CAM_YAW_DEG: float = float(os.environ.get("RENDER_YAW", "142.0"))
+CAM_YAW_DEG: float = float(os.environ.get("RENDER_YAW", "-142.0"))
 CAM_PITCH_DEG: float = float(os.environ.get("RENDER_PITCH", "11.0"))
 CAM_VFOV_DEG: float = 30.0
 CAM_FRAME_FILL: float = 0.80
 
 # Sun placed relative to the camera so the key light stays flattering at any yaw
-SUN_AZIMUTH_REL_DEG: float = -58.0
+SUN_AZIMUTH_REL_DEG: float = 58.0
 SUN_ELEVATION_DEG: float = 46.0
 SUN_ANGULAR_RADIUS: float = math.radians(2.2)
 SUN_RADIANCE = np.array([3.55, 3.20, 2.70], dtype=np.float64)
@@ -633,15 +633,15 @@ class TriangleBVH:
 
 
 def build_camera_basis() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Return orthonormal (forward, right, up) basis from the orbit yaw and pitch."""
+    """Return a right-handed orthonormal (forward, right, up) basis from the orbit yaw and pitch."""
     yaw = math.radians(CAM_YAW_DEG)
     pitch = math.radians(CAM_PITCH_DEG)
     forward = np.array(
         [math.sin(yaw) * math.cos(pitch), -math.sin(pitch), math.cos(yaw) * math.cos(pitch)],
         dtype=np.float64,
     )
-    right = normalize(np.cross(np.array([0.0, 1.0, 0.0]), forward))
-    up = np.cross(forward, right)
+    right = normalize(np.cross(forward, np.array([0.0, 1.0, 0.0])))
+    up = np.cross(right, forward)
     return forward, right, up
 
 
@@ -880,6 +880,15 @@ def evaluate_studio_backdrop(rd: np.ndarray) -> np.ndarray:
     return SKY_HORIZON_RAD * (1.0 - w)[..., None] + SKY_ZENITH_RAD * w[..., None]
 
 
+def dfg_approx(n_dot_v: np.ndarray, roughness: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Analytic split-sum DFG scale/bias (Karis 2014; same constants as three.js DFGApprox)."""
+    c0 = np.array([-1.0, -0.0275, -0.572, 0.022])
+    c1 = np.array([1.0, 0.0425, 1.04, -0.04])
+    r = roughness[:, None] * c0 + c1
+    a004 = np.minimum(r[:, 0] * r[:, 0], np.exp2(-9.28 * n_dot_v)) * r[:, 0] + r[:, 1]
+    return -1.04 * a004 + r[:, 2], 1.04 * a004 + r[:, 3]
+
+
 def sky_ambient(normal: np.ndarray) -> np.ndarray:
     """
     Cosine-convolved sky + ground-bounce radiance seen by a Lambertian surface with
@@ -898,7 +907,7 @@ def shade_scene(
     sun_vis: np.ndarray,
     ao: np.ndarray,
 ) -> np.ndarray:
-    """Sun (Cook-Torrance), sky ambient, glossy sky reflection and ground fade-out."""
+    """Sun (Cook-Torrance), sky ambient, split-sum sky reflection and ground fade-out."""
     rad = evaluate_studio_backdrop(rd).copy()
     opaque = np.nonzero(hit["kind"] != KIND_MISS)[0]
     if opaque.size == 0:
@@ -918,9 +927,11 @@ def shade_scene(
     n_dot_v = np.clip(dot(ns, v), 0.0, 1.0)
     fres = schlick_fresnel(n_dot_v, f0)
     ambient = alb * sky_ambient(ns) * (1.0 - fres) * ao_o[:, None]
-    refl = reflect(-v, ns)
-    gloss = (1.0 - rgh) ** 2
-    env_spec = evaluate_studio_backdrop(refl) * fres * (gloss * ao_o)[:, None]
+    # The backdrop is a smooth gradient, so the unfiltered lookup stands in for a prefiltered one
+    dfg_scale, dfg_bias = dfg_approx(n_dot_v, rgh)
+    r2 = (rgh * rgh)[:, None]
+    env_dir = normalize(reflect(-v, ns) * (1.0 - r2) + ns * r2)
+    env_spec = evaluate_studio_backdrop(env_dir) * (f0 * dfg_scale[:, None] + dfg_bias[:, None]) * ao_o[:, None]
 
     surf = direct + ambient + env_spec
 

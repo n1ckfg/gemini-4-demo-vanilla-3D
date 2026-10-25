@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<!--
+  Copyright 2026 Google LLC
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>glTF Mesh Renderer (three.js)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans:wght@400;500&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ground: #F6F3EC;
+      --surface: #EAE4D8;
+      --border: #D6CFC3;
+      --ink: #1C1B18;
+      --muted: #57534D;
+      --accent: #9E472A;
+      --frame-bg: #181613;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      background-color: var(--ground);
+      color: var(--ink);
+      font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 18px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      overflow-x: hidden;
+    }
+
+    .page-shell {
+      width: 100%;
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 12px 32px 48px;
+    }
+
+    .hero-header {
+      width: 100%;
+      padding: 40px 24px 32px;
+      text-align: center;
+      margin: 0 auto;
+    }
+
+    h1,
+    .hero-title {
+      font-family: "Newsreader", Georgia, serif;
+      font-weight: 500;
+      font-size: clamp(2.35rem, 4vw, 3.45rem);
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      text-wrap: balance;
+      max-width: 22ch;
+      margin: 0 auto;
+    }
+
+    .stage-workspace {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .stage-frame {
+      position: relative;
+      width: 1120px;
+      max-width: 100%;
+      height: 546px;
+      background-color: var(--frame-bg);
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 32px rgba(28, 27, 24, 0.08);
+      overflow: hidden;
+      user-select: none;
+      touch-action: none;
+      cursor: grab;
+    }
+
+    .stage-frame.is-orbiting {
+      cursor: grabbing;
+    }
+
+    .stage-frame.is-dropping {
+      outline: 2px dashed var(--accent);
+      outline-offset: -8px;
+    }
+
+    .stage-frame canvas {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none;
+    }
+
+    .stage-message {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+      font-size: 0.875rem;
+      color: #EAE4D8;
+      pointer-events: none;
+    }
+
+    .stage-message[hidden] {
+      display: none;
+    }
+
+    .stage-message code {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.8rem;
+    }
+
+    /* Tactile Edge & Corner Resize Handles */
+    .handle-e {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 16px;
+      height: calc(100% - 28px);
+      cursor: ew-resize;
+      z-index: 4;
+      border-right: 2px solid transparent;
+      transition: border-color 0.14s ease, background-color 0.14s ease;
+    }
+
+    .handle-e::after {
+      content: "";
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 4px;
+      height: 36px;
+      border-radius: 2px;
+      background-color: rgba(246, 243, 236, 0.78);
+      border: 1px solid rgba(28, 27, 24, 0.38);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+      transition: background-color 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+    }
+
+    .handle-s {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: calc(100% - 28px);
+      height: 16px;
+      cursor: ns-resize;
+      z-index: 4;
+      border-bottom: 2px solid transparent;
+      transition: border-color 0.14s ease, background-color 0.14s ease;
+    }
+
+    .handle-s::after {
+      content: "";
+      position: absolute;
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 36px;
+      height: 4px;
+      border-radius: 2px;
+      background-color: rgba(246, 243, 236, 0.78);
+      border: 1px solid rgba(28, 27, 24, 0.38);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+      transition: background-color 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+    }
+
+    .handle-e:hover,
+    .handle-e.is-active {
+      border-right-color: var(--accent);
+      background-color: rgba(158, 71, 42, 0.12);
+    }
+
+    .handle-e:hover::after,
+    .handle-e.is-active::after {
+      background-color: var(--accent);
+      border-color: #FAF7F2;
+      transform: translateY(-50%) scaleY(1.12);
+    }
+
+    .handle-s:hover,
+    .handle-s.is-active {
+      border-bottom-color: var(--accent);
+      background-color: rgba(158, 71, 42, 0.12);
+    }
+
+    .handle-s:hover::after,
+    .handle-s.is-active::after {
+      background-color: var(--accent);
+      border-color: #FAF7F2;
+      transform: translateX(-50%) scaleX(1.12);
+    }
+
+    .handle-se {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 28px;
+      height: 28px;
+      cursor: nwse-resize;
+      z-index: 5;
+      background-color: var(--surface);
+      color: var(--ink);
+      border-top: 1px solid var(--border);
+      border-left: 1px solid var(--border);
+      box-shadow: -2px -2px 6px rgba(24, 22, 19, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+    }
+
+    .handle-se svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+      pointer-events: none;
+    }
+
+    .handle-se:hover,
+    .handle-se.is-active {
+      background-color: var(--accent);
+      color: #FAF7F2;
+      border-top-color: var(--accent);
+      border-left-color: var(--accent);
+    }
+
+    .stage-caption {
+      width: 1120px;
+      max-width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 2px 0;
+      font-size: 0.875rem;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .stage-dims {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.778rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 720px) {
+      .page-shell {
+        padding: 12px 16px 36px;
+      }
+
+      .hero-header {
+        padding: 28px 12px 22px;
+      }
+
+      .stage-frame {
+        height: 440px;
+      }
+
+      .stage-caption {
+        font-size: 0.8125rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero-header">
+      <h1 class="hero-title">A single glTF mesh, rendered with three.js</h1>
+    </header>
+
+    <figure class="stage-workspace" id="stage-workspace">
+      <div class="stage-frame" id="stage-frame">
+        <canvas id="c" aria-label="three.js render of the loaded glTF model"></canvas>
+        <div class="stage-message" id="stage-message">Loading model…</div>
+        <div class="handle-e" id="handle-e" role="separator" aria-orientation="vertical" aria-label="Resize frame width" title="Drag to resize width"></div>
+        <div class="handle-s" id="handle-s" role="separator" aria-orientation="horizontal" aria-label="Resize frame height" title="Drag to resize height"></div>
+        <div class="handle-se" id="handle-se" role="separator" aria-label="Resize frame corner" title="Drag corner to resize frame">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <path d="M13 3L3 13M13 7.5L7.5 13M13 12L12 13"/>
+          </svg>
+        </div>
+      </div>
+      <figcaption class="stage-caption" id="stage-caption">
+        <span>Drag the model to orbit, drag the edges to resize, or drop a .glb file onto the frame.</span>
+        <span class="stage-dims" id="readout-dims">1120 × 546</span>
+      </figcaption>
+    </figure>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+/**
+ * glTF Mesh Renderer — three.js Port
+ * ==================================
+ * Rasterized three.js counterpart of renderer.html. Same page, same model, same studio:
+ * the constants below mirror renderer.html one-for-one, and each section notes the
+ * renderer.html construct it stands in for (see THREEJS_PORT_GUIDE.md).
+ *
+ *   renderer.html (vanilla WebGL2 path tracer)   threejs.html (three.js r170)
+ *   -------------------------------------------  ------------------------------------------
+ *   parseGlb()                                   GLTFLoader.parse()
+ *   normalizeMeshToStudio()                      normalizeContentToStudio() on a Group
+ *   buildBvhTextures() + traceMesh()             rasterization + depth buffer
+ *   cookTorranceBrdf() * SUN_RADIANCE * sunVis   DirectionalLight + VSM soft shadow map
+ *   skyAmbient() * ao                            HemisphereLight (x PI) * GTAO (indirect only)
+ *   envSpec (backdrop x dfgApprox) * ao          PMREM of the sky dome, specular only, * GTAO
+ *   evaluateStudioBackdrop()                     sky dome ShaderMaterial
+ *   ground fade in renderSample()                onBeforeCompile fade on the ground disc
+ *   FS_DISPLAY                                   StudioCameraShader (identical GLSL)
+ */
+
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
+
+window.paintDone = false;
+window.paintReady = new Promise((resolve) => {
+  window.__resolvePaintReady = resolve;
+});
+
+const PI = Math.PI;
+const DEFAULT_MODEL_URL = "../common/files/elephant.glb";
+
+// ============================================================================
+// 1. STUDIO CONSTANTS (mirror renderer.html: JS constants + FS_TRACE GLSL consts)
+// ============================================================================
+
+// Orbit camera (degrees) & framing
+const CAM_VFOV_DEG = 30.0;
+const CAM_FRAME_FILL = 0.80;
+const SUN_AZIMUTH_REL_DEG = 58.0;
+const SUN_ELEVATION_DEG = 46.0;
+const MESH_DEFAULT_ALBEDO = [0.18, 0.18, 0.18];
+const MAX_BUFFER_PIXELS = 2560 * 1440;
+
+// Linear radiance / reflectance (FS_TRACE consts)
+const SUN_RADIANCE = [3.55, 3.20, 2.70];
+const SKY_ZENITH_RAD = [0.30, 0.40, 0.58];
+const SKY_HORIZON_RAD = [0.66, 0.64, 0.62];
+const GROUND_ALBEDO = [0.46, 0.43, 0.39];
+const GROUND_ROUGHNESS = 0.92;
+const GROUND_FADE_START = 2.4;
+const GROUND_FADE_END = 7.5;
+const MESH_ROUGHNESS = 0.58;
+const AO_MAX_DIST = 0.55;
+
+// renderer.html applies MESH_ROUGHNESS / dielectric F0 to every triangle. Set false to
+// keep each material's own roughness & metalness (then port them as described in
+// THREEJS_PORT_GUIDE.md, "Per-material roughness & metalness").
+const STUDIO_MATERIAL_OVERRIDE = true;
+
+const urlParams = new URLSearchParams(window.location.search);
+let camYawDeg = parseFloat(urlParams.get("yaw") ?? "-142");
+let camPitchDeg = parseFloat(urlParams.get("pitch") ?? "11");
+
+
+// ============================================================================
+// 2. SCENE AUTHORING HOOK
+// ============================================================================
+
+/**
+ * Add your own three.js objects to `content` here. They are normalized together with
+ * the loaded model (so author them in the model's original units), framed by the
+ * camera, lit by the studio, and included in window.studio.exportGlb() — the GLB you
+ * hand to renderer.html. Example:
+ *
+ *   const box = new THREE.Mesh(
+ *     new THREE.BoxGeometry(2, 2, 2),
+ *     new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(0.6, 0.2, 0.1) })
+ *   );
+ *   box.position.set(3, 1, 0);
+ *   content.add(box);
+ */
+function buildSceneContent(content) {
+}
+
+
+// ============================================================================
+// 3. MATH UTILITIES
+// ============================================================================
+
+function clamp(x, lo, hi) {
+  return x < lo ? lo : x > hi ? hi : x;
+}
+
+function linearColor(rgb, scale = 1.0) {
+  return new THREE.Color().setRGB(rgb[0] * scale, rgb[1] * scale, rgb[2] * scale, THREE.LinearSRGBColorSpace);
+}
+
+/** World-space vertex positions of every mesh under `root`, as a flat Float32Array. */
+function collectWorldVertices(root) {
+  root.updateMatrixWorld(true);
+  const out = [];
+  const v = new THREE.Vector3();
+  root.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const pos = obj.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(obj.matrixWorld);
+      out.push(v.x, v.y, v.z);
+    }
+  });
+  return new Float32Array(out);
+}
+
+
+// ============================================================================
+// 4. MODEL LOADING, STUDIO MATERIALS & NORMALIZATION
+//    (renderer.html: parseGlb + normalizeMeshToStudio)
+// ============================================================================
+
+const studioAoUniforms = {
+  tStudioAo: { value: null },
+  studioAoRes: { value: new THREE.Vector2(1, 1) }
+};
+
+// Indirect light as in FS_TRACE: diffuse sky from the HemisphereLight only (the environment's
+// diffuse irradiance is dropped), specular from the backdrop environment, and screen-space GTAO
+// applied to both indirect terms but never to the sun — like `(ambient + envSpec) * ao`.
+function injectStudioIndirect(shader) {
+  shader.uniforms.tStudioAo = studioAoUniforms.tStudioAo;
+  shader.uniforms.studioAoRes = studioAoUniforms.studioAoRes;
+  shader.fragmentShader = shader.fragmentShader
+    .replace("#include <common>", "#include <common>\nuniform sampler2D tStudioAo;\nuniform vec2 studioAoRes;")
+    .replace("#include <lights_fragment_end>", "iblIrradiance = vec3( 0.0 );\n#include <lights_fragment_end>")
+    .replace(
+      "#include <aomap_fragment>",
+      `#include <aomap_fragment>
+      float studioAo = texture2D( tStudioAo, gl_FragCoord.xy / studioAoRes ).r;
+      reflectedLight.indirectDiffuse *= studioAo;
+      reflectedLight.indirectSpecular *= studioAo;`
+    );
+}
+
+function studioMeshOnBeforeCompile(shader) {
+  injectStudioIndirect(shader);
+}
+
+/**
+ * Mirror renderer.html's material model: base color = COLOR_0 x baseColorFactor
+ * (grey when a primitive has neither), MESH_ROUGHNESS, dielectric, double-sided.
+ */
+function applyStudioMaterials(root, parser) {
+  root.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const src = obj.material;
+    const hasColors = !!obj.geometry.attributes.color;
+    let hasMaterial = true;
+    const assoc = parser && parser.associations.get(obj);
+    if (assoc && assoc.meshes !== undefined && assoc.primitives !== undefined) {
+      hasMaterial = parser.json.meshes[assoc.meshes].primitives[assoc.primitives].material !== undefined;
+    }
+    const color = hasMaterial && src.color ? src.color.clone() : hasColors ? new THREE.Color(1, 1, 1) : linearColor(MESH_DEFAULT_ALBEDO);
+    if (src.map) console.warn("Base color textures are dropped to match renderer.html; using the color factor");
+
+    // Primitives without a glTF material get studio values, not GLTFLoader's metal default
+    const keepPbr = !STUDIO_MATERIAL_OVERRIDE && hasMaterial;
+    obj.material = new THREE.MeshStandardMaterial({
+      name: src.name,
+      color,
+      vertexColors: hasColors,
+      roughness: keepPbr ? src.roughness ?? MESH_ROUGHNESS : MESH_ROUGHNESS,
+      metalness: keepPbr ? src.metalness ?? 0.0 : 0.0,
+      side: THREE.DoubleSide
+    });
+    obj.material.onBeforeCompile = studioMeshOnBeforeCompile;
+    obj.castShadow = true;
+    obj.receiveShadow = true;
+  });
+}
+
+/** Center over the origin, rest on Y = 0 and scale to unit bounding radius. */
+function normalizeContentToStudio(studioRoot) {
+  studioRoot.position.set(0, 0, 0);
+  studioRoot.scale.setScalar(1);
+  const p = collectWorldVertices(studioRoot);
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < p.length; i += 3) {
+    for (let c = 0; c < 3; c++) {
+      lo[c] = Math.min(lo[c], p[i + c]);
+      hi[c] = Math.max(hi[c], p[i + c]);
+    }
+  }
+  const shift = [0.5 * (lo[0] + hi[0]), lo[1], 0.5 * (lo[2] + hi[2])];
+  const midY = 0.5 * (hi[1] - lo[1]);
+  let radius = 0;
+  for (let i = 0; i < p.length; i += 3) {
+    radius = Math.max(radius, Math.hypot(p[i] - shift[0], p[i + 1] - shift[1] - midY, p[i + 2] - shift[2]));
+  }
+  const s = 1.0 / Math.max(radius, 1e-12);
+  studioRoot.scale.setScalar(s);
+  studioRoot.position.set(-shift[0] * s, -shift[1] * s, -shift[2] * s);
+  return collectWorldVertices(studioRoot);
+}
+
+function parseGlb(arrayBuffer) {
+  return new Promise((resolve, reject) => new GLTFLoader().parse(arrayBuffer, "", resolve, reject));
+}
+
+
+// ============================================================================
+// 5. ORBIT CAMERA & AUTOMATIC FRAMING (identical math to renderer.html)
+// ============================================================================
+
+function buildCameraBasis() {
+  const yaw = camYawDeg * PI / 180;
+  const pitch = camPitchDeg * PI / 180;
+  const forward = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+  const up = new THREE.Vector3().crossVectors(right, forward);
+  return { forward, right, up };
+}
+
+/** Fit every vertex inside CAM_FRAME_FILL of the frustum and center the silhouette. */
+function frameCameraToMesh(positions, aspect) {
+  const { forward, right, up } = buildCameraBasis();
+  const tanV = Math.tan(CAM_VFOV_DEG * PI / 360) * CAM_FRAME_FILL;
+  const tanH = tanV * aspect;
+  const box = new THREE.Box3().setFromArray(positions);
+  const target = box.getCenter(new THREE.Vector3());
+  const rel = new THREE.Vector3();
+  let dist = 3.0;
+  for (let iter = 0; iter < 4; iter++) {
+    let dMax = -Infinity;
+    for (let i = 0; i < positions.length; i += 3) {
+      rel.fromArray(positions, i).sub(target);
+      const z = rel.dot(forward);
+      dMax = Math.max(dMax, Math.max(Math.abs(rel.dot(right)) / tanH, Math.abs(rel.dot(up)) / tanV) - z);
+    }
+    dist = dMax;
+    let sxMin = Infinity, sxMax = -Infinity, syMin = Infinity, syMax = -Infinity;
+    for (let i = 0; i < positions.length; i += 3) {
+      rel.fromArray(positions, i).sub(target);
+      const z = dist + rel.dot(forward);
+      const sx = rel.dot(right) / z;
+      const sy = rel.dot(up) / z;
+      sxMin = Math.min(sxMin, sx); sxMax = Math.max(sxMax, sx);
+      syMin = Math.min(syMin, sy); syMax = Math.max(syMax, sy);
+    }
+    target.addScaledVector(right, 0.5 * (sxMax + sxMin) * dist).addScaledVector(up, 0.5 * (syMax + syMin) * dist);
+  }
+  return { pos: target.clone().addScaledVector(forward, -dist), forward, right, up };
+}
+
+/** World-space unit vector toward the sun, orbiting with the camera yaw. */
+function sunDirection() {
+  const az = (camYawDeg + 180 + SUN_AZIMUTH_REL_DEG) * PI / 180;
+  const el = SUN_ELEVATION_DEG * PI / 180;
+  return new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
+}
+
+
+// ============================================================================
+// 6. STUDIO: SUN, SKY, GROUND & BACKDROP
+// ============================================================================
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(CAM_VFOV_DEG, 1, 0.01, 200);
+const studioRoot = new THREE.Group();
+studioRoot.name = "studio-content";
+scene.add(studioRoot);
+
+// Sun: radiance scales the BRDF exactly like SUN_RADIANCE in cookTorranceBrdf()
+const sunPeak = Math.max(...SUN_RADIANCE);
+const sun = new THREE.DirectionalLight(linearColor(SUN_RADIANCE, 1 / sunPeak), sunPeak);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -2.4;
+sun.shadow.camera.right = 2.4;
+sun.shadow.camera.top = 2.4;
+sun.shadow.camera.bottom = -2.4;
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 14;
+sun.shadow.radius = 9;
+sun.shadow.blurSamples = 16;
+sun.shadow.bias = -0.0004;
+scene.add(sun, sun.target);
+
+// Sky: three's hemisphere irradiance is mix(ground, sky, 0.5 + 0.5 n.y) * albedo / PI,
+// so scaling by PI reproduces skyAmbient() (which is already divided by PI).
+const skyAvg = SKY_ZENITH_RAD.map((z, i) => 0.5 * (z + SKY_HORIZON_RAD[i]));
+const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 1.0);
+hemi.position.set(0, 1, 0);
+scene.add(hemi);
+
+function updateLights() {
+  const l = sunDirection();
+  sun.position.copy(l).multiplyScalar(7);
+  sun.target.position.set(0, 0, 0);
+  const groundBounce = GROUND_ALBEDO.map((g, i) => g * (SUN_RADIANCE[i] * Math.max(l.y, 0) / PI + skyAvg[i]));
+  hemi.color.copy(linearColor(skyAvg, PI));
+  hemi.groundColor.copy(linearColor(groundBounce, PI));
+}
+
+// Ground disc: same shading, faded into the horizon color between GROUND_FADE_START/END
+const groundMaterial = new THREE.MeshStandardMaterial({
+  color: linearColor(GROUND_ALBEDO),
+  roughness: GROUND_ROUGHNESS,
+  metalness: 0.0
+});
+groundMaterial.onBeforeCompile = (shader) => {
+  injectStudioIndirect(shader);
+  shader.vertexShader = shader.vertexShader
+    .replace("#include <common>", "#include <common>\nvarying vec3 vGroundWorld;")
+    .replace("#include <begin_vertex>", "#include <begin_vertex>\nvGroundWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;");
+  shader.fragmentShader = shader.fragmentShader
+    .replace("#include <common>", "#include <common>\nvarying vec3 vGroundWorld;")
+    .replace(
+      "#include <opaque_fragment>",
+      `#include <opaque_fragment>
+      float groundFade = smoothstep( ${GROUND_FADE_START.toFixed(4)}, ${GROUND_FADE_END.toFixed(4)}, length( vGroundWorld.xz ) );
+      gl_FragColor.rgb = mix( gl_FragColor.rgb, vec3( ${SKY_HORIZON_RAD.map((c) => c.toFixed(4)).join(", ")} ), groundFade );`
+    );
+};
+const ground = new THREE.Mesh(new THREE.CircleGeometry(GROUND_FADE_END + 0.5, 128), groundMaterial);
+ground.rotation.x = -PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Backdrop dome evaluating evaluateStudioBackdrop() per view direction
+const skyDome = new THREE.Mesh(
+  new THREE.SphereGeometry(80, 32, 16),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      u_zenith: { value: new THREE.Vector3(...SKY_ZENITH_RAD) },
+      u_horizon: { value: new THREE.Vector3(...SKY_HORIZON_RAD) }
+    },
+    vertexShader: `
+      varying vec3 vWorld;
+      void main() {
+        vec4 wp = modelMatrix * vec4( position, 1.0 );
+        vWorld = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform vec3 u_zenith;
+      uniform vec3 u_horizon;
+      varying vec3 vWorld;
+      void main() {
+        vec3 rd = normalize( vWorld - cameraPosition );
+        float w = pow( smoothstep( 0.0, 0.85, clamp( rd.y, 0.0, 1.0 ) ), 0.8 );
+        gl_FragColor = vec4( mix( u_horizon, u_zenith, w ), 1.0 );
+      }`
+  })
+);
+skyDome.renderOrder = -1;
+skyDome.frustumCulled = false;
+scene.add(skyDome);
+
+
+// ============================================================================
+// 7. RENDERER & POST: GTAO -> SCENE -> CAMERA OPTICS (FS_DISPLAY)
+// ============================================================================
+
+// Identical to renderer.html's FS_DISPLAY: cos^4 vignette, ACES (Narkowicz), sRGB, grain
+const StudioCameraShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    u_res: { value: new THREE.Vector2(1, 1) }
+  },
+  vertexShader: `
+    void main() {
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+    }`,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D tDiffuse;
+    uniform vec2 u_res;
+
+    vec3 acesFilm(vec3 x) {
+      const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+      return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+    }
+
+    vec3 linearToSrgb(vec3 m) {
+      vec3 hi = 1.055 * pow(max(m, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+      vec3 lo = 12.92 * m;
+      return clamp(mix(hi, lo, lessThanEqual(m, vec3(0.0031308))), 0.0, 1.0);
+    }
+
+    float hashGrain(ivec2 p) {
+      uint n = uint(p.x) * 374761393u + uint(p.y) * 668265263u;
+      n = (n ^ (n >> 13u)) * 1274126177u;
+      return float((n ^ (n >> 16u)) & 0xffffffu) / 16777215.0;
+    }
+
+    void main() {
+      ivec2 ip = ivec2(gl_FragCoord.xy);
+      vec3 hdr = max(texelFetch(tDiffuse, ip, 0).rgb, vec3(0.0));
+
+      vec2 uv = (gl_FragCoord.xy / u_res * 2.0 - 1.0) * vec2(1.0, u_res.y / u_res.x);
+      float cosLens = 1.0 / sqrt(1.0 + dot(uv * 0.62, uv * 0.62));
+      hdr *= 0.50 + 0.50 * pow(cosLens, 3.4);
+
+      vec3 c = linearToSrgb(acesFilm(hdr));
+      float grain = (hashGrain(ip) - 0.5) * 2.0 * 0.006 * 1.7;
+      gl_FragColor = vec4(clamp(c + grain * 4.0 * c * (1.0 - c), 0.0, 1.0), 1.0);
+    }`
+};
+
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.VSMShadowMap;
+
+// Specular environment = the same backdrop the sky dome draws
+const envScene = new THREE.Scene();
+envScene.add(skyDome.clone());
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(envScene, 0, 0.1, 200).texture;
+
+// MSAA on the HDR target replaces renderer.html's jittered sub-pixel anti-aliasing
+const composerTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+const composer = new EffectComposer(renderer, composerTarget);
+const gtaoPass = new GTAOPass(scene, camera, 1, 1);
+gtaoPass.output = GTAOPass.OUTPUT.Off;
+gtaoPass.needsSwap = false;
+gtaoPass.updateGtaoMaterial({ radius: AO_MAX_DIST, distanceExponent: 1.0, thickness: 1.0, scale: 1.0, samples: 16 });
+composer.addPass(gtaoPass);
+composer.addPass(new RenderPass(scene, camera));
+const cameraPass = new ShaderPass(StudioCameraShader);
+composer.addPass(cameraPass);
+studioAoUniforms.tStudioAo.value = gtaoPass.gtaoMap;
+
+
+// ============================================================================
+// 8. STAGE, RENDER-ON-DEMAND, ORBIT, RESIZE & DROP (same UX as renderer.html)
+// ============================================================================
+
+const stageFrame = document.getElementById("stage-frame");
+const stageCaption = document.getElementById("stage-caption");
+const stageWorkspace = document.getElementById("stage-workspace");
+const stageMessage = document.getElementById("stage-message");
+const readoutDims = document.getElementById("readout-dims");
+
+let worldVertices = null;
+let bufW = 0;
+let bufH = 0;
+let renderPending = false;
+
+function showMessage(html) {
+  stageMessage.innerHTML = html;
+  stageMessage.hidden = !html;
+}
+
+function updateReadout() {
+  const cssW = Math.round(stageFrame.clientWidth);
+  const cssH = Math.round(stageFrame.clientHeight);
+  readoutDims.textContent = worldVertices ? `${cssW} × ${cssH} · three.js r${THREE.REVISION}` : `${cssW} × ${cssH}`;
+}
+
+function renderFrame() {
+  renderPending = false;
+  if (!worldVertices) return;
+  const cam = frameCameraToMesh(worldVertices, bufW / Math.max(1, bufH));
+  camera.aspect = bufW / Math.max(1, bufH);
+  camera.position.copy(cam.pos);
+  camera.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(cam.right, cam.up, cam.forward.clone().negate()));
+  camera.updateProjectionMatrix();
+  updateLights();
+  composer.render();
+  updateReadout();
+  if (!window.paintDone) {
+    window.paintDone = true;
+    if (window.__resolvePaintReady) window.__resolvePaintReady();
+  }
+}
+
+function requestRender() {
+  if (!renderPending) {
+    renderPending = true;
+    requestAnimationFrame(renderFrame);
+  }
+}
+
+function syncCanvasSize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let w = Math.max(1, Math.round(stageFrame.clientWidth * dpr));
+  let h = Math.max(1, Math.round(stageFrame.clientHeight * dpr));
+  const scale = Math.min(1, Math.sqrt(MAX_BUFFER_PIXELS / (w * h)));
+  w = Math.max(1, Math.floor(w * scale));
+  h = Math.max(1, Math.floor(h * scale));
+  if (w !== bufW || h !== bufH) {
+    bufW = w;
+    bufH = h;
+    renderer.setSize(w, h, false);
+    composer.setSize(w, h);
+    studioAoUniforms.studioAoRes.value.set(w, h);
+    cameraPass.uniforms.u_res.value.set(w, h);
+    requestRender();
+  }
+}
+
+async function setModel(arrayBuffer) {
+  const gltf = await parseGlb(arrayBuffer);
+  while (studioRoot.children.length) studioRoot.remove(studioRoot.children[0]);
+  const content = new THREE.Group();
+  content.add(gltf.scene);
+  buildSceneContent(content);
+  applyStudioMaterials(content, gltf.parser);
+  studioRoot.add(content);
+  worldVertices = normalizeContentToStudio(studioRoot);
+  let triangles = 0;
+  studioRoot.traverse((o) => {
+    if (o.isMesh) triangles += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3;
+  });
+  window.__meshStats = { triangles };
+  showMessage("");
+  requestRender();
+}
+
+async function loadModelFromUrl(url) {
+  showMessage("Loading model…");
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await setModel(await res.arrayBuffer());
+  } catch (err) {
+    console.error(err);
+    showMessage(
+      `Couldn't load <code>${url}</code> (${err.message}).<br>` +
+      `Serve the repository over HTTP (e.g. <code>run.command</code>) or drop a .glb file here.`
+    );
+  }
+}
+
+// ---------- Orbit drag ----------
+let orbitState = null;
+
+stageFrame.addEventListener("pointerdown", (ev) => {
+  if (ev.target !== stageFrame && ev.target !== canvas) return;
+  ev.preventDefault();
+  stageFrame.setPointerCapture(ev.pointerId);
+  stageFrame.classList.add("is-orbiting");
+  orbitState = { pointerId: ev.pointerId, x: ev.clientX, y: ev.clientY, yaw: camYawDeg, pitch: camPitchDeg };
+});
+
+stageFrame.addEventListener("pointermove", (ev) => {
+  if (!orbitState || orbitState.pointerId !== ev.pointerId) return;
+  camYawDeg = orbitState.yaw - (ev.clientX - orbitState.x) * 0.35;
+  camPitchDeg = clamp(orbitState.pitch + (ev.clientY - orbitState.y) * 0.25, -5, 80);
+  requestRender();
+});
+
+const endOrbit = (ev) => {
+  if (!orbitState || orbitState.pointerId !== ev.pointerId) return;
+  stageFrame.classList.remove("is-orbiting");
+  if (stageFrame.hasPointerCapture(ev.pointerId)) stageFrame.releasePointerCapture(ev.pointerId);
+  orbitState = null;
+};
+stageFrame.addEventListener("pointerup", endOrbit);
+stageFrame.addEventListener("pointercancel", endOrbit);
+
+// ---------- Drag & drop a .glb ----------
+stageFrame.addEventListener("dragover", (ev) => {
+  ev.preventDefault();
+  stageFrame.classList.add("is-dropping");
+});
+stageFrame.addEventListener("dragleave", () => stageFrame.classList.remove("is-dropping"));
+stageFrame.addEventListener("drop", async (ev) => {
+  ev.preventDefault();
+  stageFrame.classList.remove("is-dropping");
+  const file = ev.dataTransfer.files[0];
+  if (!file) return;
+  try {
+    await setModel(await file.arrayBuffer());
+  } catch (err) {
+    console.error(err);
+    showMessage(`Couldn't read <code>${file.name}</code> (${err.message}).`);
+  }
+});
+
+// ---------- Resizable stage frame ----------
+let pointerState = null;
+let hasCustomSize = false;
+let targetW = Math.min(1120, stageWorkspace.clientWidth || 1120);
+let targetH = window.innerWidth <= 720 ? 440 : 546;
+
+function renderStage(cssW, cssH) {
+  const availW = Math.max(280, stageWorkspace.clientWidth || (window.innerWidth - 36));
+  const clampedW = Math.max(Math.min(354, availW), Math.min(availW, Math.round(cssW)));
+  const clampedH = Math.max(280, Math.min(900, Math.round(cssH)));
+  stageFrame.style.width = `${clampedW}px`;
+  stageFrame.style.height = `${clampedH}px`;
+  if (stageCaption) stageCaption.style.width = `${clampedW}px`;
+  syncCanvasSize();
+  updateReadout();
+}
+
+function scheduleStageRender(w, h) {
+  targetW = w;
+  targetH = h;
+  renderStage(targetW, targetH);
+}
+
+function attachResizeHandle(el, axis) {
+  if (!el) return;
+  el.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    el.setPointerCapture(ev.pointerId);
+    el.classList.add("is-active");
+    hasCustomSize = true;
+    pointerState = {
+      pointerId: ev.pointerId,
+      axis,
+      startX: ev.clientX,
+      startY: ev.clientY,
+      startW: stageFrame.clientWidth || targetW,
+      startH: stageFrame.clientHeight || targetH
+    };
+  });
+
+  el.addEventListener("pointermove", (ev) => {
+    if (!pointerState || pointerState.pointerId !== ev.pointerId) return;
+    const dx = ev.clientX - pointerState.startX;
+    const dy = ev.clientY - pointerState.startY;
+    const nextW = pointerState.axis === "y" ? pointerState.startW : pointerState.startW + dx;
+    const nextH = pointerState.axis === "x" ? pointerState.startH : pointerState.startH + dy;
+    scheduleStageRender(nextW, nextH);
+  });
+
+  const endDrag = (ev) => {
+    if (!pointerState || pointerState.pointerId !== ev.pointerId) return;
+    el.classList.remove("is-active");
+    if (el.hasPointerCapture(ev.pointerId)) {
+      el.releasePointerCapture(ev.pointerId);
+    }
+    pointerState = null;
+  };
+
+  el.addEventListener("pointerup", endDrag);
+  el.addEventListener("pointercancel", endDrag);
+}
+
+attachResizeHandle(document.getElementById("handle-e"), "x");
+attachResizeHandle(document.getElementById("handle-s"), "y");
+attachResizeHandle(document.getElementById("handle-se"), "xy");
+
+window.resizeStage = (w, h) => {
+  hasCustomSize = true;
+  renderStage(w, h);
+};
+
+window.addEventListener("resize", () => {
+  const availW = Math.max(280, stageWorkspace.clientWidth);
+  const nextW = hasCustomSize ? Math.min(targetW, availW) : Math.min(1120, availW);
+  const nextH = hasCustomSize
+    ? targetH
+    : window.innerHeight > window.innerWidth
+      ? Math.min(820, Math.max(546, window.innerHeight - 260))
+      : window.innerWidth <= 720
+        ? 440
+        : 546;
+  scheduleStageRender(nextW, nextH);
+});
+
+// ---------- Console helpers for porting (see THREEJS_PORT_GUIDE.md) ----------
+window.studio = {
+  THREE,
+  scene,
+  camera,
+  studioRoot,
+  get view() {
+    return { yaw: camYawDeg, pitch: camPitchDeg };
+  },
+  /** Current view in renderer.html terms: URL query, explicit camera basis and sun direction. */
+  rendererParams() {
+    const r = new THREE.Vector3();
+    const u = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    camera.updateMatrixWorld();
+    camera.matrixWorld.extractBasis(r, u, b);
+    const round = (v) => v.toArray().map((x) => +x.toFixed(6));
+    return {
+      query: `?yaw=${camYawDeg.toFixed(2)}&pitch=${camPitchDeg.toFixed(2)}`,
+      camera: {
+        pos: round(camera.position),
+        forward: round(b.negate()),
+        right: round(r),
+        up: round(u),
+        tanHalfV: +Math.tan(camera.fov * PI / 360).toFixed(6)
+      },
+      sunDir: round(sunDirection())
+    };
+  },
+  /** Download the normalized studio content as a .glb for renderer.html. */
+  async exportGlb(filename = "scene.glb") {
+    const glb = await new GLTFExporter().parseAsync(studioRoot, { binary: true });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([glb], { type: "model/gltf-binary" }));
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    return glb;
+  }
+};
+
+// ---------- Boot ----------
+renderStage(targetW, targetH);
+loadModelFromUrl(urlParams.get("model") || DEFAULT_MODEL_URL);
+  </script>
+</body>
+</html>
